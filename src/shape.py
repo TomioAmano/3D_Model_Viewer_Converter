@@ -75,11 +75,11 @@ class Shape() :
     def read_npy(self, file_path):
         self.model_type = self.VOXEL_MODEL
         npy_voxels = np.load(file_path)
-        self.voxel_size = npy_voxels.size[0]
-        self.npy_voxels = npy_voxels
-        vol_data = Volume(npy_voxels)
+        self.voxel_size = max(npy_voxels.shape[0],npy_voxels.shape[1])
+        self.npy_voxels = npy_voxels.reshape([self.voxel_size,self.voxel_size,self.voxel_size])
+        vol_data = Volume(self.npy_voxels)
         self.vedo_mesh = vol_data.isosurface(0.9)
-        self.vedo_legomesh = vol_data.legosurface(0.9,1.1)
+        self.vedo_legomesh = vol_data.legosurface(0.9,1.1).c("grey").lighting("plastic")
     
     def read_vox(self, file_path):
         self.model_type = self.VOXEL_MODEL
@@ -93,7 +93,7 @@ class Shape() :
         FILLED = 1
         voxel_data = np.full((self.voxel_size, self.voxel_size, self.voxel_size), EMPTY, dtype=np.int8)
         for voxel in voxels:
-            voxel_data[voxel.x, voxel.y, voxel.z] = FILLED
+            voxel_data[self.voxel_size - voxel.y - 1, voxel.z,voxel.x ] = FILLED
         self.npy_voxels = voxel_data
         vol_data = Volume(voxel_data)
         self.vedo_legomesh = vol_data.legosurface(0.9,1.1).c("grey").lighting("plastic")
@@ -113,9 +113,13 @@ class Shape() :
                     voxel_model_256[i*16:i*16+16,j*16:j*16+16,k*16:k*16+16] = voxel_model_b[voxel_model_bi[i,j,k]]
         voxel_model_256 = np.flip(np.transpose(voxel_model_256, (2,1,0)),2)
         voxel_model_256_a = voxel_model_256.reshape([1,voxel_model_256.shape[0],voxel_model_256.shape[1],voxel_model_256.shape[2],1])
-        self.npy_voxels = voxel_model_256_a
+        self.npy_voxels = voxel_model_256_a.reshape([256,256,256])
+        vol_data = Volume(self.npy_voxels)
+        self.vedo_mesh = vol_data.isosurface(0.9)
+        self.vedo_legomesh = vol_data.legosurface(0.9,1.1).c("grey").lighting("plastic")
 
     def normalize_vertecies(self, v_list, dim = 16, unit= GRID_SCALE):
+        # size normaliztion
         min_list = [10000.0, 10000.0, 10000.0]
         max_list = [-10000.0, -10000.0, -10000.0]
         for vertex in v_list:
@@ -127,9 +131,23 @@ class Shape() :
         #v_list = [[vertex[0]+max_size/2, vertex[1]+max_size/2,vertex[2]+max_size/2] for vertex in v_list]
         v_list = [[vertex[0]-min_pos, vertex[1]-min_pos,vertex[2]-min_pos] for vertex in v_list]
         scale = ((dim-2) * unit) / max_size
-        print("scale=",scale)
+        # print("scale=",scale)
         iv_list = [[int(vertex[0]*scale+unit),int(vertex[1]*scale+unit),int(vertex[2]*scale+unit) ] for vertex in v_list]
-        return iv_list
+
+        # center position normalization 要デバッグ
+        min_ilist = [dim*unit, dim*unit, dim*unit]
+        max_ilist = [0,0,0]
+        for ivertex in iv_list:
+            min_ilist = [min(min_ilist[0], ivertex[0]), min(min_ilist[1], ivertex[1]),min(min_ilist[2], ivertex[2])]
+            max_ilist = [max(max_ilist[0], ivertex[0]), max(max_ilist[1], ivertex[1]),max(max_ilist[2], ivertex[2])]
+        center =  [(min_v + max_v)//2 for (min_v, max_v) in zip(min_ilist, max_ilist)]
+        ajust = [(dim*unit//2 - cv)//2 for cv in center ]
+        #ajust = [400,0,0]
+        n_iv_list = []
+        for ivertex in iv_list:
+            n_iv_list.append([i_val + ajust_val for (i_val, ajust_val) in zip(ivertex, ajust)])
+
+        return n_iv_list
 
     def fill_grid(self,triangle, voxels):
         p1 = triangle.get_grid(triangle.p1,GRID_SCALE,voxels.shape[0])
@@ -205,6 +223,8 @@ class Shape() :
         voxels = np.full((dim, dim, dim), UNKNOWN, dtype=np.int8)
         self.voxelize_mesh(v_list,f_list,voxels)
         self.fill_background(voxels)
+        # Rotate 90 degree
+        voxels = np.rot90(voxels,axes=(2,0))
         return voxels
 
     def mesh2voxel(self, voxel_size):
@@ -235,12 +255,13 @@ class Shape() :
         voxel_shape.voxel_size = voxel_size
         vol_data = Volume(voxel_shape.npy_voxels)
         voxel_shape.vedo_mesh = vol_data.isosurface(0.9)
-        voxel_shape.vedo_legomesh = vol_data.legosurface(0.9,1.1)
+        voxel_shape.vedo_legomesh = vol_data.legosurface(0.9,1.1).c("grey").lighting("plastic")
         return voxel_shape       
 
     def save_vox(self, file_path):
         npy_data = self.npy_voxels > 0.8
-        vox_data = Vox.from_dense(npy_data)
+        npy_data4voxel = np.flip(npy_data,(0,1)).copy()
+        vox_data = Vox.from_dense(npy_data4voxel)
         VoxWriter(file_path, vox_data).write()
     
     def save_npy(self, file_path):
@@ -262,12 +283,15 @@ class Shape() :
 
 if __name__ == "__main__":
     shape1 = Shape()
+    
     shape1.read_mesh("sample_data\cube.obj")
     voxel = shape1.mesh2voxel(16)
     voxel.save_vox("sample_data\cube16.vox")
     voxel2 = voxel.voxel2voxel(32)
     voxel2.save_vox("sample_data\cube32.vox")
-
+    
+    shape1.read_npy("sample_data\\robot_face_000001.npy")
+    shape1.save_vox("sample_data\\robot_face_000001.vox")
 
 
 
