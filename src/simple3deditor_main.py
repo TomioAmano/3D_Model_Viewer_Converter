@@ -15,6 +15,7 @@ from pyvox.models import Vox
 from pyvox.writer import VoxWriter
 from pyvox.parser import VoxParser
 
+
 PARTION_NUM = 6
 PARTION_PER_ROW = 3
 class MainWindow(Qt.QMainWindow):
@@ -167,7 +168,14 @@ class MainWindow(Qt.QMainWindow):
             
             if self.mesh_list[ix] is not None:
                 self.vp_list[ix].clear()
-            if file_name.endswith("npy"):
+            if file_name.endswith("z256.npy"):    
+                z_shape = sh.Shape()
+                z_shape.read_z256(file_path)
+                self.shape_list[ix] = z_shape
+                self.mesh_list[ix] = z_shape.vedo_legomesh
+                self.vp_list[ix] += self.mesh_list[ix]
+
+            elif file_name.endswith("npy"):
                 npy_shape = sh.Shape()
                 npy_shape.read_npy(file_path)
                 self.shape_list[ix] = npy_shape
@@ -226,10 +234,13 @@ class MainWindow(Qt.QMainWindow):
                 mesh.save_obj(file_path)
             return
         if shape.model_type == shape.VOXEL_MODEL:
-            if file_path.endswith("npy"):
+            if file_path.endswith("z256") or file_path.endswith("z256.npy"):
+                shape.save_z256(file_path)
+            elif file_path.endswith("npy"):
                 shape.save_npy(file_path)
             elif file_path.endswith("vox"):
                 shape.save_vox(file_path)
+                
 
     @Qt.pyqtSlot()
     def onClickSaveButton(self):

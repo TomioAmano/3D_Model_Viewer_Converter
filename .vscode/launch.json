@@ -10,6 +10,13 @@
             "type": "python",
             "request": "launch",
             "program": "${file}",
+            // "args": ["--ae", "--train", "--epoch", "200", "--sample_dir", "samples//all_vox256_img0_64", "--sample_vox_size", "64"],
+            //"args": ["--ae","--train", "--epoch", "200", "--sample_vox_size", "64","--sample_dir", "samples//all_vox256_img0_64"],
+            "args": ["--ae","--sample_dir", "samples//im_ae_out", "--start", "9450", "--end", "9479"],
+            //"args": ["--ae","--morph","--sample_dir", "samples//im_ae_out", "--start", "9450", "--end", "9479"],
+            //"args": ["--ae", "--getz"],
+            // "args": ["--svr", "--train", "--epoch", "1000", "--sample_dir", "samples/all_vox256_img1"],
+            //"args": ["--svr", "--sample_dir", "samples/im_svr_out", "--start", "0", "--end", "16"],
             "console": "integratedTerminal"
         }
     ]

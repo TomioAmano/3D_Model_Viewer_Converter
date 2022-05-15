@@ -4,6 +4,7 @@ from pyvox.parser import VoxParser
 from vedo import *
 import numpy as np
 import scipy.io
+from shape_im import Shape_IM
 
 GRID_SCALE = 100
 UNKNOWN = -1
@@ -62,8 +63,38 @@ class Shape() :
         self.vedo_mesh = None
         self.vedo_legomesh = None
         self.voxel_size = None
+        self.zdim = None
         self.SURFACE_MODEL = 1
         self.VOXEL_MODEL = 2
+        self.shape_im = Shape_IM()
+        self.shape_ae = self.shape_im.im_ae
+        self.shape_ae.load_checkpoint()
+
+    # z256次元データの読み込み    
+    def read_z256(self, file_path):
+        self.model_type = self.VOXEL_MODEL
+        np_z256 = np.load(file_path)
+        self.zdim = np_z256
+        npy_voxels = self.shape_ae.decode_zdim(np_z256)
+
+        self.voxel_size = 64
+        EMPTY = 0
+        FILLED = 1
+        voxel_data = np.full((self.voxel_size, self.voxel_size, self.voxel_size), EMPTY, dtype=np.int8)
+        grid = [(ix,iy,iz) for ix in range(64) for iy in range(64) for iz in range(64)]
+        partion = [(dx,dy,dz) for dx in range(4) for dy in range(4) for dz in range(4)]
+
+        for ix,iy,iz in grid:
+            for dx,dy,dz in partion:
+                point_val = npy_voxels[ix*4+dx+1, iy*4+dy+1, iz*4+dz+1]
+                if point_val > 0.5:
+                    voxel_data[ix,iy,iz] = FILLED
+                    break
+        voxel_data_ = voxel_data.transpose([2,1,0])                        
+        self.npy_voxels = voxel_data_
+        vol_data = Volume(voxel_data_)
+        self.vedo_legomesh = vol_data.legosurface(0.9,1.1).c("grey").lighting("plastic")
+
 
     def read_mesh(self, file_path):
         self.model_type = self.SURFACE_MODEL
@@ -75,7 +106,7 @@ class Shape() :
     def read_npy(self, file_path):
         self.model_type = self.VOXEL_MODEL
         npy_voxels = np.load(file_path)
-        self.voxel_size = max(npy_voxels.shape[0],npy_voxels.shape[1])
+        self.voxel_size = max(npy_voxels.shape[0],npy_voxels.shape[1],npy_voxels.shape[2])
         self.npy_voxels = npy_voxels.reshape([self.voxel_size,self.voxel_size,self.voxel_size])
         vol_data = Volume(self.npy_voxels)
         self.vedo_mesh = vol_data.isosurface(0.9)
@@ -280,6 +311,9 @@ class Shape() :
                 f.write("f {:d} {:d} {:d} {:d}\n".format(face[0]+1, face[1]+1, face[2]+1, face[3]+1))
         f.close()
 
+    def save_z256(self, file_path):
+        zdim = self.shape_ae.get_zdim(self.npy_voxels).cpu().detach().numpy()
+        np.save(file_path, zdim)
 
 if __name__ == "__main__":
     shape1 = Shape()
